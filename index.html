@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>统计数据分析可视化平台</title>
+<!-- ECharts 图表库（本地引用，离线可用） -->
+<script src="./echarts.min.js"></script>
+<!-- Papa Parse CSV 解析库（本地引用，离线可用） -->
+<script src="./papaparse.min.js"></script>
+<style>
+/* ═══════════════════════════════════════════════
+   主题变量与全局样式
+   ═══════════════════════════════════════════════ */
+:root{
+  --primary:#2563eb; --primary-dark:#1d4ed8; --primary-light:#dbeafe;
+  --accent:#7c3aed; --success:#10b981; --warning:#f59e0b; --danger:#ef4444;
+  --bg:#f1f5f9; --card:#ffffff; --text:#0f172a; --muted:#64748b;
+  --border:#e2e8f0; --border-soft:#f1f5f9;
+  --shadow:0 4px 16px rgba(15,23,42,.06);
+  --radius:12px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg); color:var(--text); line-height:1.6;
+  min-height:100vh;
+}
+.app{max-width:1400px; margin:0 auto; padding:24px 20px 60px}
+
+/* ═══════════ 头部 ═══════════ */
+header.top{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:24px;
+}
+header.top h1{
+  font-size:22px; font-weight:700; display:flex; align-items:center; gap:10px;
+}
+header.top h1 .logo{
+  width:38px;height:38px; border-radius:10px;
+  background:linear-gradient(135deg,var(--primary),var(--accent));
+  display:flex; align-items:center; justify-content:center; color:#fff; font-size:20px;
+}
+header.top .subtitle{color:var(--muted); font-size:13px; margin-top:2px}
+
+/* ═══════════ 通用卡片 ═══════════ */
+.card{
+  background:var(--card); border-radius:var(--radius);
+  box-shadow:var(--shadow); padding:20px; margin-bottom:20px;
+  border:1px solid var(--border-soft);
+}
+.card h2{
+  font-size:16px; font-weight:700; margin-bottom:14px;
+  display:flex; align-items:center; gap:8px;
+  padding-bottom:12px; border-bottom:1px solid var(--border-soft);
+}
+.card h2 .num{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:24px;height:24px; border-radius:6px; font-size:12px;
+  background:var(--primary); color:#fff; font-weight:700;
+}
+
+/* ═══════════ 上传区 ═══════════ */
+.dropzone{
+  border:2px dashed #cbd5e1; border-radius:var(--radius);
+  padding:40px 20px; text-align:center; cursor:pointer;
+  transition:all .25s; background:#f8fafc;
+}
+.dropzone:hover, .dropzone.drag{
+  border-color:var(--primary); background:var(--primary-light);
+}
+.dropzone .ic{font-size:42px; margin-bottom:10px}
+.dropzone p{color:var(--muted); font-size:14px}
+.dropzone .fname{color:var(--primary); font-weight:600; margin-top:8px}
+.dropzone input{display:none}
+
+/* ═══════════ 数据预览表 ═══════════ */
+.table-wrap{
+  max-height:320px; overflow:auto; border:1px solid var(--border);
+  border-radius:8px;
+}
+table.data{border-collapse:collapse; width:100%; font-size:13px}
+table.data th, table.data td{
+  padding:8px 12px; text-align:left; border-bottom:1px solid var(--border-soft);
+  white-space:nowrap;
+}
+table.data th{
+  background:#f8fafc; position:sticky; top:0; z-index:1;
+  font-weight:600; color:var(--text);
+}
+table.data tr:hover td{background:#f8fafc}
+.clean-info{
+  display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px; font-size:13px;
+}
+.clean-info .chip{
+  padding:4px 12px; border-radius:20px; background:var(--primary-light);
+  color:var(--primary-dark); font-weight:600;
+}
+.clean-info .chip.warn{background:#fef3c7; color:#b45309}
+.clean-info .chip.danger{background:#fee2e2; color:#b91c1c}
+.clean-info .chip.ok{background:#d1fae5; color:#047857}
+
+/* ═══════════ 控件行 ═══════════ */
+.ctrl-row{
+  display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:14px;
+}
+.ctrl-row label{font-size:13px; color:var(--muted); font-weight:600}
+select, .btn{
+  padding:8px 14px; border-radius:8px; border:1px solid var(--border);
+  background:#fff; font-size:13px; cursor:pointer; font-family:inherit;
+  transition:all .15s;
+}
+select:focus{outline:none; border-color:var(--primary)}
+.btn{
+  background:var(--primary); color:#fff; border-color:var(--primary);
+  font-weight:600;
+}
+.btn:hover{background:var(--primary-dark)}
+.btn.ghost{background:#fff; color:var(--primary)}
+.btn.ghost:hover{background:var(--primary-light)}
+.btn.success{background:var(--success); border-color:var(--success)}
+.btn.success:hover{background:#059669}
+
+/* ═══════════ 统计指标面板 ═══════════ */
+.metric-grid{
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:12px;
+}
+.metric{
+  background:#f8fafc; border-radius:10px; padding:14px;
+  border:1px solid var(--border-soft);
+}
+.metric .label{font-size:12px; color:var(--muted); margin-bottom:4px}
+.metric .value{font-size:20px; font-weight:700; color:var(--text)}
+.metric .value small{font-size:12px; font-weight:500; color:var(--muted)}
+
+/* 频数分布表 */
+.freq-table{width:100%; border-collapse:collapse; font-size:13px}
+.freq-table th,.freq-table td{padding:6px 10px; border-bottom:1px solid var(--border-soft)}
+.freq-table th{background:#f8fafc; text-align:left}
+.freq-bar{height:16px; border-radius:3px; background:var(--primary); min-width:2px}
+
+/* ═══════════ 图表区 ═══════════ */
+.charts-grid{
+  display:grid; grid-template-columns:repeat(2,1fr); gap:20px;
+}
+.chart-box{
+  background:#fff; border:1px solid var(--border-soft); border-radius:10px;
+  padding:14px;
+}
+.chart-box h3{font-size:14px; font-weight:600; margin-bottom:8px}
+.chart-box .chart{width:100%; height:320px}
+
+/* ═══════════ 回归区 ═══════════ */
+.reg-layout{display:grid; grid-template-columns:1fr 1.5fr; gap:20px}
+.reg-results{font-size:13px}
+.reg-results .row{
+  display:flex; justify-content:space-between; padding:8px 0;
+  border-bottom:1px solid var(--border-soft);
+}
+.reg-results .row:last-child{border-bottom:none}
+.reg-results .k{color:var(--muted)}
+.reg-results .v{font-weight:600; font-family:monospace}
+.r2-bar{margin-top:10px}
+.r2-bar .bar{
+  height:8px; border-radius:4px; background:#e2e8f0; overflow:hidden;
+}
+.r2-bar .bar>div{height:100%; background:linear-gradient(90deg,var(--success),var(--primary)); border-radius:4px}
+
+/* ═══════════ 报告区 ═══════════ */
+.report-text{
+  width:100%; min-height:260px; padding:14px; border-radius:8px;
+  border:1px solid var(--border); font-size:13px; line-height:1.8;
+  font-family:inherit; resize:vertical; background:#fafafa;
+}
+.report-actions{display:flex; gap:10px; margin-top:12px}
+
+.empty-hint{
+  text-align:center; color:var(--muted); padding:40px 20px; font-size:14px;
+}
+
+@media(max-width:900px){
+  .charts-grid{grid-template-columns:1fr}
+  .reg-layout{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- 头部 -->
+  <header class="top">
+    <div>
+      <h1><span class="logo">📊</span> 统计数据分析可视化平台</h1>
+      <div class="subtitle">面向统计专业 · 描述统计 · 多图表可视化 · 一元线性回归</div>
+    </div>
+  </header>
+
+  <!-- ① 数据上传与预处理 -->
+  <section class="card">
+    <h2><span class="num">1</span>数据集上传与预处理</h2>
+    <div class="dropzone" id="dropzone">
+      <input type="file" id="fileInput" accept=".csv,text/csv">
+      <div class="ic">📁</div>
+      <p>点击或拖拽 CSV 文件到此处上传（支持问卷/学习样本数据）</p>
+      <p class="fname" id="fileName"></p>
+    </div>
+    <div id="cleanInfo" class="clean-info" style="display:none"></div>
+    <div id="tableWrap" class="table-wrap" style="display:none">
+      <table class="data" id="dataTable"></table>
+    </div>
+  </section>
+
+  <!-- ② 描述统计指标 -->
+  <section class="card">
+    <h2><span class="num">2</span>描述统计指标</h2>
+    <div class="ctrl-row">
+      <label>选择数值列：</label>
+      <select id="statCol"><option>请先上传数据</option></select>
+    </div>
+    <div id="statMetrics" class="metric-grid"></div>
+    <div id="freqWrap" style="margin-top:16px"></div>
+  </section>
+
+  <!-- ③ 多类型统计可视化 -->
+  <section class="card">
+    <h2><span class="num">3</span>多类型统计可视化</h2>
+    <div class="charts-grid">
+      <div class="chart-box">
+        <h3>📈 折线图（趋势）</h3>
+        <div class="ctrl-row">
+          <label>X轴：</label><select id="lineX"></select>
+          <label>Y轴：</label><select id="lineY"></select>
+        </div>
+        <div class="chart" id="chartLine"></div>
+      </div>
+      <div class="chart-box">
+        <h3>🥧 饼图（占比）</h3>
+        <div class="ctrl-row">
+          <label>分类列：</label><select id="pieCol"></select>
+        </div>
+        <div class="chart" id="chartPie"></div>
+      </div>
+      <div class="chart-box">
+        <h3>📊 柱状图（分组对比）</h3>
+        <div class="ctrl-row">
+          <label>分组：</label><select id="barX"></select>
+          <label>数值：</label><select id="barY"></select>
+        </div>
+        <div class="chart" id="chartBar"></div>
+      </div>
+      <div class="chart-box">
+        <h3>📦 箱线图（分布离散度）</h3>
+        <div class="ctrl-row">
+          <label>数值列：</label><select id="boxCol"></select>
+        </div>
+        <div class="chart" id="chartBox"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ④ 一元线性回归 -->
+  <section class="card">
+    <h2><span class="num">4</span>一元线性回归建模</h2>
+    <div class="reg-layout">
+      <div>
+        <div class="ctrl-row">
+          <label>自变量 X：</label><select id="regX"></select>
+        </div>
+        <div class="ctrl-row">
+          <label>因变量 Y：</label><select id="regY"></select>
+        </div>
+        <button class="btn" id="runReg">计算回归</button>
+        <div class="reg-results" id="regResults" style="margin-top:16px"></div>
+      </div>
+      <div>
+        <div class="chart" id="chartReg" style="height:380px"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ⑤ 分析报告 -->
+  <section class="card">
+    <h2><span class="num">5</span>分析报告</h2>
+    <button class="btn" id="genReport">生成分析报告</button>
+    <div class="report-actions">
+      <button class="btn ghost" id="copyReport">📋 复制报告</button>
+      <button class="btn success" id="downloadReport">⬇ 导出 TXT</button>
+    </div>
+    <textarea class="report-text" id="reportText" placeholder="点击「生成分析报告」，系统将自动汇总统计指标、图表与回归结果…" readonly></textarea>
+  </section>
+
+</div>
+
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════════
+   统计数据分析可视化平台
+   模块结构：
+     1. 全局状态
+     2. 工具函数
+     3. 数据解析与清洗
+     4. 描述统计函数库
+     5. 频数分布
+     6. 一元线性回归
+     7. 图表渲染（ECharts）
+     8. 报告生成
+     9. 事件绑定与初始化
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ═══════════ 1. 全局状态 ═══════════ */
+const State = {
+  raw: null,        // 原始解析结果 {columns, rows}
+  clean: null,      // 清洗后数据 {columns, rows, types}
+  charts: {},       // ECharts 实例字典
+};
+
+const $ = s => document.querySelector(s);
+
+/* ═══════════ 2. 工具函数 ═══════════ */
+
+/** 判断字符串是否为数值（含科学计数法） */
+function isNumeric(v){
+  if (v === null || v === undefined || v === '') return false;
+  const n = Number(v);
+  return !isNaN(n) && isFinite(n);
+}
+
+/** 判断字符串是否可解析为日期 */
+function isDate(v){
+  if (!v || typeof v !== 'string') return false;
+  const d = new Date(v);
+  return !isNaN(d.getTime()) && /[-/:.年]/.test(v);
+}
+
+/** 数值保留指定位数 */
+const fmt = (n, d=4) => (n === null || n === undefined || isNaN(n)) ? '—' : Number(n).toFixed(d);
+
+/** 深拷贝数组 */
+const clone = arr => JSON.parse(JSON.stringify(arr));
+
+/** 从数据行中提取某列的数值数组（过滤非数值） */
+function colNumeric(rows, col){
+  const out = [];
+  for (const r of rows){
+    const v = r[col];
+    if (isNumeric(v)) out.push(Number(v));
+  }
+  return out;
+}
+
+/** 提取某列全部非空值 */
+function colValues(rows, col){
+  return rows.map(r => r[col]).filter(v => v !== null && v !== undefined && v !== '');
+}
+
+/* ═══════════ 3. 数据解析与清洗 ═══════════ */
+
+/**
+ * 解析 CSV 文件并清洗数据
+ * - 删除全空行、空值行
+ * - 数值列缺失值用列均值填充
+ * - 异常值检测（IQR 法）：超出 [Q1-1.5IQR, Q3+1.5IQR] 的行被剔除
+ * - 自动识别列类型：numeric / categorical / date
+ */
+function parseAndClean(file, cb){
+  Papa.parse(file, {
+    header: true,
+    skipEmptyLines: true,
+    dynamicTyping: false,
+    complete(res){
+      const columns = res.meta.fields || [];
+      let rows = res.data.filter(r => Object.values(r).some(v => v !== '' && v !== null));
+      const info = { removedEmpty: res.data.length - rows.length, removedOutlier: 0 };
+
+      // 列类型识别
+      const types = {};
+      for (const c of columns){
+        const vals = colValues(rows, c);
+        const numRatio = vals.filter(isNumeric).length / (vals.length || 1);
+        const dateRatio = vals.filter(isDate).length / (vals.length || 1);
+        if (numRatio >= 0.8) types[c] = 'numeric';
+        else if (dateRatio >= 0.8) types[c] = 'date';
+        else types[c] = 'categorical';
+      }
+
+      // 数值列缺失值用均值填充
+      for (const c of columns){
+        if (types[c] !== 'numeric') continue;
+        const nums = colNumeric(rows, c);
+        const mean = nums.length ? nums.reduce((a,b)=>a+b,0)/nums.length : 0;
+        for (const r of rows){
+          if (r[c] === '' || r[c] === null || r[c] === undefined){
+            r[c] = String(mean);
+          }
+        }
+      }
+
+      // 异常值剔除：对所有数值列，任一值超出 IQR 范围则剔除整行
+      const bounds = {};
+      for (const c of columns){
+        if (types[c] !== 'numeric') continue;
+        const nums = colNumeric(rows, c).sort((a,b)=>a-b);
+        if (nums.length < 4) continue;
+        const q1 = quantile(nums, 0.25), q3 = quantile(nums, 0.75);
+        const iqr = q3 - q1;
+        bounds[c] = [q1 - 1.5*iqr, q3 + 1.5*iqr];
+      }
+      const before = rows.length;
+      rows = rows.filter(r => {
+        for (const c of columns){
+          if (!bounds[c]) continue;
+          if (isNumeric(r[c])){
+            const v = Number(r[c]);
+            if (v < bounds[c][0] || v > bounds[c][1]) return false;
+          }
+        }
+        return true;
+      });
+      info.removedOutlier = before - rows.length;
+      info.finalRows = rows.length;
+
+      State.raw = { columns, rows: clone(rows) };
+      State.clean = { columns, rows, types };
+      cb(info);
+    },
+    error(err){ cb(null, err); }
+  });
+}
+
+/* ═══════════ 4. 描述统计函数库 ═══════════ */
+
+/**
+ * 分位数计算（线性插值法）
+ * @param {number[]} sorted 已升序排列的数组
+ * @param {number} p 分位点 0~1
+ */
+function quantile(sorted, p){
+  const n = sorted.length;
+  if (!n) return NaN;
+  if (n === 1) return sorted[0];
+  const pos = (n - 1) * p;
+  const lo = Math.floor(pos), hi = Math.ceil(pos);
+  if (lo === hi) return sorted[lo];
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+}
+
+/** 均值 */
+function mean(arr){
+  return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : NaN;
+}
+
+/** 中位数 */
+function median(arr){
+  const s = [...arr].sort((a,b)=>a-b);
+  return quantile(s, 0.5);
+}
+
+/** 样本方差（除以 n-1） */
+function variance(arr){
+  if (arr.length < 2) return NaN;
+  const m = mean(arr);
+  return arr.reduce((s,x)=>s+(x-m)**2, 0) / (arr.length - 1);
+}
+
+/** 样本标准差 */
+function stdDev(arr){ return Math.sqrt(variance(arr)); }
+
+/** 极差 */
+function range(arr){ return arr.length ? Math.max(...arr) - Math.min(...arr) : NaN; }
+
+/**
+ * 计算单列全部描述统计量
+ * @returns {object} n, mean, median, var, std, min, max, q1, q3, iqr, range
+ */
+function descriptiveStats(rows, col){
+  const arr = colNumeric(rows, col);
+  if (!arr.length) return null;
+  const sorted = [...arr].sort((a,b)=>a-b);
+  return {
+    n: arr.length,
+    mean: mean(arr),
+    median: median(arr),
+    variance: variance(arr),
+    std: stdDev(arr),
+    min: Math.min(...arr),
+    max: Math.max(...arr),
+    q1: quantile(sorted, 0.25),
+    q3: quantile(sorted, 0.75),
+    iqr: quantile(sorted, 0.75) - quantile(sorted, 0.25),
+    range: range(arr),
+  };
+}
+
+/* ═══════════ 5. 频数分布 ═══════════ */
+
+/**
+ * 频数分布表（分类型：各类别计数；数值型：等距分组）
+ * @returns {Array<{name, count, percent}>}
+ */
+function frequency(rows, col, bins=8){
+  const vals = colValues(rows, col);
+  const type = State.clean.types[col];
+  const total = vals.length;
+  let freq;
+
+  if (type === 'numeric'){
+    // 等距分组
+    const nums = vals.map(Number).filter(v=>!isNaN(v));
+    const min = Math.min(...nums), max = Math.max(...nums);
+    const w = (max - min) / bins;
+    freq = [];
+    for (let i=0;i<bins;i++){
+      const lo = min + i*w, hi = min + (i+1)*w;
+      const count = nums.filter(v => (i===bins-1 ? v>=lo && v<=hi : v>=lo && v<hi)).length;
+      freq.push({
+        name: `${fmt(lo,1)}~${fmt(hi,1)}`,
+        count, percent: total ? (count/total*100) : 0,
+      });
+    }
+  } else {
+    // 分类计数
+    const map = {};
+    for (const v of vals) map[v] = (map[v]||0)+1;
+    freq = Object.entries(map)
+      .map(([name,count]) => ({name, count, percent: total?(count/total*100):0}))
+      .sort((a,b)=>b.count-a.count);
+  }
+  return freq;
+}
+
+/* ═══════════ 6. 一元线性回归 ═══════════ */
+
+/**
+ * 最小二乘一元线性回归
+ * y = a + b*x
+ * @returns {object} a(截距), b(斜率), r2(决定系数), xMin, xMax
+ */
+function linearRegression(x, y){
+  const n = Math.min(x.length, y.length);
+  if (n < 2) return null;
+  const xs = x.slice(0,n), ys = y.slice(0,n);
+  const mx = mean(xs), my = mean(ys);
+  let sxy=0, sxx=0;
+  for (let i=0;i<n;i++){
+    sxy += (xs[i]-mx)*(ys[i]-my);
+    sxx += (xs[i]-mx)**2;
+  }
+  const b = sxx === 0 ? 0 : sxy / sxx;
+  const a = my - b * mx;
+  // 决定系数 R²
+  let ssRes=0, ssTot=0;
+  for (let i=0;i<n;i++){
+    const yhat = a + b*xs[i];
+    ssRes += (ys[i]-yhat)**2;
+    ssTot += (ys[i]-my)**2;
+  }
+  const r2 = ssTot === 0 ? 0 : 1 - ssRes/ssTot;
+  return {
+    a, b, r2,
+    xMin: Math.min(...xs), xMax: Math.max(...xs),
+    yMin: Math.min(...ys), yMax: Math.max(...ys),
+    n,
+  };
+}
+
+/* ═══════════ 7. 图表渲染 ═══════════ */
+
+/** 初始化 / 复用 ECharts 实例 */
+function getChart(id){
+  if (State.charts[id]) return State.charts[id];
+  const inst = echarts.init(document.getElementById(id));
+  State.charts[id] = inst;
+  return inst;
+}
+
+/** 折线图 */
+function renderLine(xCol, yCol){
+  const c = getChart('chartLine');
+  const rows = State.clean.rows;
+  const xData = rows.map(r => r[xCol]);
+  const yData = rows.map(r => isNumeric(r[yCol]) ? Number(r[yCol]) : null);
+  c.setOption({
+    tooltip:{trigger:'axis'},
+    grid:{left:50,right:20,top:20,bottom:40},
+    xAxis:{type:'category', data:xData, axisLabel:{rotate:xData.length>10?30:0, fontSize:11}},
+    yAxis:{type:'value', name:yCol},
+    series:[{
+      name:yCol, type:'line', data:yData, smooth:true,
+      lineStyle:{color:'#2563eb', width:2},
+      itemStyle:{color:'#2563eb'},
+      areaStyle:{color:'rgba(37,99,235,.15)'},
+    }],
+  }, true);
+}
+
+/** 饼图 */
+function renderPie(col){
+  const c = getChart('chartPie');
+  const freq = frequency(State.clean.rows, col);
+  c.setOption({
+    tooltip:{trigger:'item', formatter:'{b}: {c} ({d}%)'},
+    legend:{type:'scroll', bottom:0, fontSize:11},
+    series:[{
+      type:'pie', radius:['40%','70%'], center:['50%','45%'],
+      avoidLabelOverlap:true,
+      itemStyle:{borderRadius:6, borderColor:'#fff', borderWidth:2},
+      label:{formatter:'{b}\n{d}%', fontSize:11},
+      data: freq.map(f => ({name:f.name, value:f.count})),
+    }],
+    color:['#2563eb','#7c3aed','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899','#84cc16'],
+  }, true);
+}
+
+/** 柱状图（分组均值对比） */
+function renderBar(xCol, yCol){
+  const c = getChart('chartBar');
+  const rows = State.clean.rows;
+  // 按 xCol 分组，计算 yCol 的均值
+  const groups = {};
+  for (const r of rows){
+    const k = r[xCol];
+    const v = isNumeric(r[yCol]) ? Number(r[yCol]) : null;
+    if (v === null) continue;
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(v);
+  }
+  const cats = Object.keys(groups);
+  const means = cats.map(k => mean(groups[k]));
+  c.setOption({
+    tooltip:{trigger:'axis'},
+    grid:{left:50,right:20,top:20,bottom:60},
+    xAxis:{type:'category', data:cats, axisLabel:{rotate:cats.length>6?30:0, fontSize:11}},
+    yAxis:{type:'value', name:`${yCol}(均值)`},
+    series:[{
+      type:'bar', data:means, barMaxWidth:50,
+      itemStyle:{
+        color: new echarts.graphic.LinearGradient(0,0,0,1,[
+          {offset:0, color:'#7c3aed'}, {offset:1, color:'#2563eb'}
+        ]),
+        borderRadius:[6,6,0,0],
+      },
+      label:{show:true, position:'top', fontSize:11, formatter:p=>fmt(p.value,2)},
+    }],
+  }, true);
+}
+
+/** 箱线图 */
+function renderBox(col){
+  const c = getChart('chartBox');
+  const rows = State.clean.rows;
+  const arr = colNumeric(rows, col).sort((a,b)=>a-b);
+  if (!arr.length){ c.clear(); return; }
+  const min = Math.min(...arr);
+  const q1 = quantile(arr, 0.25);
+  const med = quantile(arr, 0.5);
+  const q3 = quantile(arr, 0.75);
+  const max = Math.max(...arr);
+  const iqr = q3 - q1;
+  const lower = q1 - 1.5*iqr, upper = q3 + 1.5*iqr;
+  const outliers = arr.filter(v => v < lower || v > upper).map(v => [0, v]);
+
+  c.setOption({
+    tooltip:{trigger:'item'},
+    grid:{left:50,right:20,top:20,bottom:40},
+    xAxis:{type:'category', data:[col], boundaryGap:true},
+    yAxis:{type:'value', name:col},
+    series:[
+      {
+        name:col, type:'boxplot', data:[[min,q1,med,q3,max]],
+        itemStyle:{color:'rgba(37,99,235,.3)', borderColor:'#2563eb'},
+      },
+      {
+        name:'离群点', type:'scatter', data:outliers,
+        itemStyle:{color:'#ef4444'},
+      },
+    ],
+  }, true);
+}
+
+/** 回归散点 + 拟合线 */
+function renderReg(xCol, yCol, reg){
+  const c = getChart('chartReg');
+  const rows = State.clean.rows;
+  const x = rows.map(r=>Number(r[xCol])).filter(v=>!isNaN(v));
+  const y = rows.map(r=>Number(r[yCol])).filter(v=>!isNaN(v));
+  const n = Math.min(x.length, y.length);
+  const scatter = [];
+  for (let i=0;i<n;i++) scatter.push([x[i], y[i]]);
+  const line = [[reg.xMin, reg.a + reg.b*reg.xMin], [reg.xMax, reg.a + reg.b*reg.xMax]];
+  c.setOption({
+    tooltip:{trigger:'item', formatter:p=>{
+      if (p.seriesName==='拟合线') return `y = ${fmt(reg.a,4)} + ${fmt(reg.b,4)}·x`;
+      return `(${fmt(p.value[0],3)}, ${fmt(p.value[1],3)})`;
+    }},
+    grid:{left:50,right:20,top:30,bottom:40},
+    xAxis:{type:'value', name:xCol},
+    yAxis:{type:'value', name:yCol},
+    series:[
+      {name:'样本点', type:'scatter', data:scatter, itemStyle:{color:'#7c3aed', opacity:.7}},
+      {name:'拟合线', type:'line', data:line, lineStyle:{color:'#ef4444', width:2, type:'dashed'}, symbol:'none'},
+    ],
+  }, true);
+}
+
+/* ═══════════ 8. 报告生成 ═══════════ */
+
+function generateReport(){
+  const d = State.clean;
+  if (!d) return '请先上传数据';
+  const lines = [];
+  lines.push('═══════════════════════════════════════════');
+  lines.push('        统 计 数 据 分 析 报 告');
+  lines.push('═══════════════════════════════════════════');
+  lines.push(`生成时间：${new Date().toLocaleString('zh-CN')}`);
+  lines.push('');
+
+  lines.push('一、数据概况');
+  lines.push('─────────────────────────────────────────');
+  lines.push(`  原始变量数：${d.columns.length}`);
+  lines.push(`  清洗后样本量：${d.rows.length}`);
+  lines.push(`  变量清单：${d.columns.join('、')}`);
+  lines.push('');
+
+  lines.push('二、描述统计（数值变量）');
+  lines.push('─────────────────────────────────────────');
+  const numCols = d.columns.filter(c => d.types[c]==='numeric');
+  for (const c of numCols){
+    const s = descriptiveStats(d.rows, c);
+    if (!s) continue;
+    lines.push(`  【${c}】`);
+    lines.push(`    样本量 n=${s.n}，均值=${fmt(s.mean,4)}，中位数=${fmt(s.median,4)}`);
+    lines.push(`    方差=${fmt(s.variance,4)}，标准差=${fmt(s.std,4)}`);
+    lines.push(`    最小值=${fmt(s.min,4)}，最大值=${fmt(s.max,4)}，极差=${fmt(s.range,4)}`);
+    lines.push(`    Q1=${fmt(s.q1,4)}，Q3=${fmt(s.q3,4)}，IQR=${fmt(s.iqr,4)}`);
+    lines.push('');
+  }
+
+  const catCols = d.columns.filter(c => d.types[c]==='categorical');
+  if (catCols.length){
+    lines.push('三、分类变量频数分布');
+    lines.push('─────────────────────────────────────────');
+    for (const c of catCols){
+      lines.push(`  【${c}】`);
+      const f = frequency(d.rows, c);
+      for (const item of f.slice(0,10)){
+        lines.push(`    ${item.name}：${item.count} 次（${fmt(item.percent,1)}%）`);
+      }
+      lines.push('');
+    }
+  }
+
+  if (State.regResult){
+    const r = State.regResult;
+    lines.push('四、一元线性回归结果');
+    lines.push('─────────────────────────────────────────');
+    lines.push(`  回归方程：Y = ${fmt(r.a,4)} + ${fmt(r.b,4)}·X`);
+    lines.push(`  样本量 n=${r.n}，决定系数 R²=${fmt(r.r2,4)}`);
+    const strength = r.r2>=0.8?'高度拟合':r.r2>=0.5?'中度拟合':r.r2>=0.2?'低度拟合':'拟合较差';
+    lines.push(`  拟合优度说明：R²=${fmt(r.r2,4)}，表明模型对数据的解释程度为「${strength}」。`);
+    const direction = r.b>0?'正相关':'负相关';
+    lines.push(`  斜率方向：${direction}（斜率 b=${fmt(r.b,4)}）。`);
+    lines.push('');
+  }
+
+  lines.push('═══════════════════════════════════════════');
+  lines.push('（本报告由统计数据分析可视化平台自动生成）');
+  return lines.join('\n');
+}
+
+/* ═══════════ 9. 事件绑定与初始化 ═══════════ */
+
+/** 填充下拉框 */
+function fillSelect(sel, cols, type){
+  sel.innerHTML = '';
+  const list = type ? cols.filter(c => State.clean.types[c]===type) : cols;
+  for (const c of list){
+    const o = document.createElement('option');
+    o.value = c; o.textContent = c;
+    sel.appendChild(o);
+  }
+}
+
+/** 渲染统计指标面板 */
+function renderStats(col){
+  const s = descriptiveStats(State.clean.rows, col);
+  const wrap = $('#statMetrics');
+  wrap.innerHTML = '';
+  if (!s){
+    wrap.innerHTML = '<div class="empty-hint">该列无可计算的数值</div>';
+    return;
+  }
+  const items = [
+    ['样本量 n', s.n, 0],
+    ['均值', s.mean, 4],
+    ['中位数', s.median, 4],
+    ['方差', s.variance, 4],
+    ['标准差', s.std, 4],
+    ['最小值', s.min, 4],
+    ['最大值', s.max, 4],
+    ['极差', s.range, 4],
+    ['Q1 (25%)', s.q1, 4],
+    ['Q3 (75%)', s.q3, 4],
+    ['四分位距 IQR', s.iqr, 4],
+  ];
+  for (const [label, val, d] of items){
+    const div = document.createElement('div');
+    div.className = 'metric';
+    div.innerHTML = `<div class="label">${label}</div><div class="value">${fmt(val,d)}</div>`;
+    wrap.appendChild(div);
+  }
+
+  const freq = frequency(State.clean.rows, col);
+  const fWrap = $('#freqWrap');
+  const max = Math.max(...freq.map(f=>f.count));
+  fWrap.innerHTML = `<h3 style="font-size:14px;margin-bottom:10px">频数分布</h3>
+    <div class="table-wrap"><table class="freq-table">
+      <thead><tr><th>分组/类别</th><th>频数</th><th>频率</th><th style="width:40%">分布</th></tr></thead>
+      <tbody>${freq.map(f=>`<tr>
+        <td>${f.name}</td><td>${f.count}</td><td>${fmt(f.percent,1)}%</td>
+        <td><div class="freq-bar" style="width:${(f.count/max*100).toFixed(1)}%"></div></td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+/** 数据加载完成后初始化所有控件与图表 */
+function initAfterLoad(){
+  const d = State.clean;
+  const numCols = d.columns.filter(c => d.types[c]==='numeric');
+  const catCols = d.columns.filter(c => d.types[c]==='categorical');
+  const allCols = d.columns;
+
+  fillSelect($('#statCol'), allCols, 'numeric');
+  if (numCols[0]) renderStats(numCols[0]);
+
+  fillSelect($('#lineX'), allCols);
+  fillSelect($('#lineY'), allCols, 'numeric');
+  fillSelect($('#pieCol'), catCols.length ? catCols : allCols);
+  fillSelect($('#barX'), catCols.length ? catCols : allCols);
+  fillSelect($('#barY'), allCols, 'numeric');
+  fillSelect($('#boxCol'), allCols, 'numeric');
+
+  fillSelect($('#regX'), allCols, 'numeric');
+  fillSelect($('#regY'), allCols, 'numeric');
+
+  if (numCols[0]){
+    renderLine(allCols[0], numCols[0]);
+    renderBox(numCols[0]);
+  }
+  if (catCols[0] && numCols[0]){
+    renderPie(catCols[0]);
+    renderBar(catCols[0], numCols[0]);
+  } else if (numCols[0]){
+    renderPie(allCols[0]);
+    renderBar(allCols[0], numCols[0]);
+  }
+}
+
+/** 渲染数据预览表 */
+function renderTable(){
+  const d = State.clean;
+  const tbl = $('#dataTable');
+  const head = `<thead><tr>${d.columns.map(c=>`<th>${c}<br><small style="color:var(--muted);font-weight:400">(${d.types[c]==='numeric'?'数值':d.types[c]==='date'?'日期':'分类'})</small></th>`).join('')}</tr></thead>`;
+  const preview = d.rows.slice(0, 100);
+  const body = `<tbody>${preview.map(r=>`<tr>${d.columns.map(c=>`<td>${r[c]}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  tbl.innerHTML = head + body;
+  $('#tableWrap').style.display = 'block';
+}
+
+/** 上传处理 */
+function handleFile(file){
+  $('#fileName').textContent = file.name;
+  parseAndClean(file, (info, err) => {
+    if (err){ alert('解析失败：' + err.message); return; }
+    renderTable();
+    const ci = $('#cleanInfo');
+    ci.style.display = 'flex';
+    ci.innerHTML = `
+      <span class="chip ok">样本量 ${info.finalRows}</span>
+      <span class="chip">空值行剔除 ${info.removedEmpty}</span>
+      <span class="chip warn">异常值剔除 ${info.removedOutlier}</span>
+      <span class="chip">变量数 ${State.clean.columns.length}</span>
+    `;
+    initAfterLoad();
+  });
+}
+
+/** 绑定事件 */
+function bindEvents(){
+  const dz = $('#dropzone'), fi = $('#fileInput');
+  dz.addEventListener('click', () => fi.click());
+  fi.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('drag');
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+
+  $('#statCol').addEventListener('change', e => renderStats(e.target.value));
+
+  $('#lineX').addEventListener('change', () => renderLine($('#lineX').value, $('#lineY').value));
+  $('#lineY').addEventListener('change', () => renderLine($('#lineX').value, $('#lineY').value));
+  $('#pieCol').addEventListener('change', e => renderPie(e.target.value));
+  $('#barX').addEventListener('change', () => renderBar($('#barX').value, $('#barY').value));
+  $('#barY').addEventListener('change', () => renderBar($('#barX').value, $('#barY').value));
+  $('#boxCol').addEventListener('change', e => renderBox(e.target.value));
+
+  $('#runReg').addEventListener('click', () => {
+    const xCol = $('#regX').value, yCol = $('#regY').value;
+    if (!xCol || !yCol){ alert('请选择 X 和 Y 列'); return; }
+    if (xCol === yCol){ alert('X 和 Y 不能是同一列'); return; }
+    const x = colNumeric(State.clean.rows, xCol);
+    const y = colNumeric(State.clean.rows, yCol);
+    const reg = linearRegression(x, y);
+    if (!reg){ alert('样本量不足，无法回归'); return; }
+    State.regResult = reg;
+    State.regCols = {x: xCol, y: yCol};
+    const rr = $('#regResults');
+    const strength = reg.r2>=0.8?'高度拟合':reg.r2>=0.5?'中度拟合':reg.r2>=0.2?'低度拟合':'拟合较差';
+    rr.innerHTML = `
+      <div class="row"><span class="k">回归方程</span><span class="v">Y = ${fmt(reg.a,4)} + ${fmt(reg.b,4)}·X</span></div>
+      <div class="row"><span class="k">截距 a</span><span class="v">${fmt(reg.a,4)}</span></div>
+      <div class="row"><span class="k">斜率 b</span><span class="v">${fmt(reg.b,4)}</span></div>
+      <div class="row"><span class="k">样本量 n</span><span class="v">${reg.n}</span></div>
+      <div class="row"><span class="k">决定系数 R²</span><span class="v">${fmt(reg.r2,4)}</span></div>
+      <div class="r2-bar"><div class="bar"><div style="width:${Math.max(0,Math.min(1,reg.r2))*100}%"></div></div></div>
+      <div style="margin-top:8px;color:var(--muted);font-size:12px">
+        拟合优度：R²=${fmt(reg.r2,4)}，模型对数据的解释程度为「${strength}」。<br>
+        斜率${reg.b>0?'为正，X 与 Y 正相关':'为负，X 与 Y 负相关'}。
+      </div>
+    `;
+    renderReg(xCol, yCol, reg);
+  });
+
+  $('#genReport').addEventListener('click', () => {
+    $('#reportText').value = generateReport();
+  });
+  $('#copyReport').addEventListener('click', async () => {
+    const t = $('#reportText');
+    if (!t.value){ alert('请先生成报告'); return; }
+    try{ await navigator.clipboard.writeText(t.value); alert('报告已复制到剪贴板'); }
+    catch{ t.select(); document.execCommand('copy'); alert('报告已复制'); }
+  });
+  $('#downloadReport').addEventListener('click', () => {
+    const t = $('#reportText').value;
+    if (!t){ alert('请先生成报告'); return; }
+    const blob = new Blob([t], {type:'text/plain;charset=utf-8'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `统计分析报告_${new Date().toISOString().slice(0,10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  window.addEventListener('resize', () => {
+    Object.values(State.charts).forEach(c => c.resize());
+  });
+}
+
+bindEvents();
+</script>
+</body>
+</html>
